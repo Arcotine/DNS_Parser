@@ -3,98 +3,47 @@
 #include <iostream>
 #include <unordered_map>
 #include <algorithm>
+#include <DNSMessage.hpp>
 
 using namespace std;
 
-// Defines every error thrown during DNS name validation
-enum dnsNameError { VALID, INVALID_NAME_ERROR, NUMERIC_NAME_ERROR, INVALID_CHAR_ERROR };
-
-// DNS Flag section of the header split into bit fields
-struct DNSFlags {
-    unsigned char QR : 1;
-    unsigned char OPCODE : 4;
-    unsigned char AA : 1;
-    unsigned char TC : 1;
-    unsigned char RD : 1;
-    unsigned char RA : 1;
-    unsigned char Z : 3;
-    unsigned char RCODE : 4;
-};
-
-// Defines data stored by all question records
-struct DNSQuestion {
-    string qName;
-    unsigned int qType;
-    unsigned int qClass;
-};
-
-// Defines data stored by all resource records
-struct ResourceRecord {
-    string rName;
-    unsigned int rType;
-    unsigned int rClass;
-    signed int rTtl;
-    unsigned int rdLength;    
-    string rData;
-};
-
-// Stores all DNS Message data and allows printing of the data
-class DNSMessage {
-    public:
-        DNSMessage();
-        DNSMessage(string hexData);
-        
-        void printData();
-        
-    private:
-        unsigned int dnsID;
-        DNSFlags headerFlags;
-        unsigned int qdCount;
-        unsigned int anCount;
-        unsigned int nsCount;
-        unsigned int arCount;
-
-        vector<DNSQuestion> questions;
-        vector<ResourceRecord> answers;
-        vector<ResourceRecord> authority;
-        vector<ResourceRecord> additional;
-
-        void parseHeader(string& hexData, int& begin);
-        void parseQuestions(string& hexData, int& begin);
-        void parseResourceRecords(string& hexData, int& begin);
-
-        string printableHeader();
-        string printableQuestions();
-        string printableResourceRecords();
-
-        void parseRRData(string& hexData, int& begin, ResourceRecord& dataRecord);
-        string extractName(string& hexData, int& begin);
-        dnsNameError validateName(string dnsName);
-};
-
 DNSMessage::DNSMessage() {
-    this->dnsID = 0;
-    this->headerFlags = {};
-    this->qdCount = 0;
-    this->anCount = 0;
-    this->nsCount = 0;
-    this->arCount = 0;
+    dnsID = 0;
+    headerFlags = {};
+    qdCount = 0;
+    anCount = 0;
+    nsCount = 0;
+    arCount = 0;
 }
 
 // Creates DNSMessage object from hex formatted string
 DNSMessage::DNSMessage(string hexData) {
     int nextSection = 0;
-    this->parseHeader(hexData, nextSection);
-    this->parseQuestions(hexData, nextSection);
-    this->parseResourceRecords(hexData, nextSection);
+
+    if(extractRawHex(hexData) < 1) {
+        dnsID = 0;
+        headerFlags = {};
+        qdCount = 0;
+        anCount = 0;
+        nsCount = 0;
+        arCount = 0;
+
+        cout << "Error: Invalid hex encoded string. Aborting." << endl;
+    }
+    else {
+        parseHeader(hexData, nextSection);
+        parseQuestions(hexData, nextSection);
+        parseResourceRecords(hexData, nextSection);
+    }
+
 }
 
 // Prints DNS Object's data in proper format
 void DNSMessage::printData() {
     string output = string();
-    output.append(this->printableHeader());
-    output.append("\n" + this->printableQuestions());
-    output.append("\n" + this->printableResourceRecords());
+    output.append(printableHeader());
+    output.append("\n" + printableQuestions());
+    output.append("\n" + printableResourceRecords());
     
     cout << output;
 }
@@ -128,30 +77,30 @@ string DNSMessage::printableHeader() {
     }
     
     string output = ";; ->>HEADER<<- ";
-    output.append("opcode: " + opcodeMap[this->headerFlags.OPCODE] + ", ");
-    output.append("status: " + rcodeMap[this->headerFlags.RCODE] + ", ");
-    output.append("id: " + to_string(this->dnsID) + "\n");
+    output.append("opcode: " + opcodeMap[headerFlags.OPCODE] + ", ");
+    output.append("status: " + rcodeMap[headerFlags.RCODE] + ", ");
+    output.append("id: " + to_string(dnsID) + "\n");
 
     output.append(";; flags:");
-    if(this->headerFlags.QR) {
+    if(headerFlags.QR) {
         output.append(" qr");
     }
-    if(this->headerFlags.AA) {
+    if(headerFlags.AA) {
         output.append(" aa");
     }
-    if(this->headerFlags.TC) {
+    if(headerFlags.TC) {
         output.append(" tc");
     }
-    if(this->headerFlags.RD) {
+    if(headerFlags.RD) {
         output.append(" rd");
     }
-    if(this->headerFlags.RA) {
+    if(headerFlags.RA) {
         output.append(" ra");
     }
-    output.append("; QUERY: " + to_string(this->qdCount) + ", ");
-    output.append("ANSWER: " + to_string(this->anCount) + ", ");
-    output.append("AUTHORITY: " + to_string(this->nsCount) + ", ");
-    output.append("ADDITIONAL: " + to_string(this->arCount) + "\n");
+    output.append("; QUERY: " + to_string(qdCount) + ", ");
+    output.append("ANSWER: " + to_string(anCount) + ", ");
+    output.append("AUTHORITY: " + to_string(nsCount) + ", ");
+    output.append("ADDITIONAL: " + to_string(arCount) + "\n");
     return output;
 }
 
@@ -215,10 +164,10 @@ string DNSMessage::printableQuestions() {
     string output = string();
     if(qdCount) {
         output = ";; QUESTION SECTION:\n";
-        for(int i = 0; i < this->questions.size(); i++) {
-            output.append(";" + this->questions[i].qName + "\t\t");
-            output.append(classMap[this->questions[i].qClass] + "\t");
-            output.append(qTypes[this->questions[i].qType] + "\n");
+        for(int i = 0; i < questions.size(); i++) {
+            output.append(";" + questions[i].qName + "\t\t");
+            output.append(classMap[questions[i].qClass] + "\t");
+            output.append(qTypes[questions[i].qType] + "\n");
         }
     }
 
@@ -286,32 +235,32 @@ string DNSMessage::printableResourceRecords() {
     
     if(anCount) {
         output.append(";; ANSWER SECTION:\n");
-        for(int i = 0; i < this->answers.size(); i++) {
-            output.append(this->answers[i].rName + "\t\t");
-            output.append(to_string(this->answers[i].rTtl) + "\t");
-            output.append(classMap[this->answers[i].rClass] + "\t");
-            output.append(rrTypes[this->answers[i].rType] + "\t");
-            output.append(this->answers[i].rData + "\n");
+        for(int i = 0; i < answers.size(); i++) {
+            output.append(answers[i].rName + "\t\t");
+            output.append(to_string(answers[i].rTtl) + "\t");
+            output.append(classMap[answers[i].rClass] + "\t");
+            output.append(rrTypes[answers[i].rType] + "\t");
+            output.append(answers[i].rData + "\n");
         }
     }
     if(nsCount) {
         output.append(";; AUTHORITY SECTION:\n");
-        for(int i = 0; i < this->authority.size(); i++) {
-            output.append(this->authority[i].rName + "\t\t");
-            output.append(to_string(this->authority[i].rTtl) + "\t");
-            output.append(classMap[this->authority[i].rClass] + "\t");
-            output.append(rrTypes[this->authority[i].rType] + "\t");
-            output.append(this->authority[i].rData + "\n");
+        for(int i = 0; i < authority.size(); i++) {
+            output.append(authority[i].rName + "\t\t");
+            output.append(to_string(authority[i].rTtl) + "\t");
+            output.append(classMap[authority[i].rClass] + "\t");
+            output.append(rrTypes[authority[i].rType] + "\t");
+            output.append(authority[i].rData + "\n");
         }
     }
     if(arCount) {
         output.append(";; ADDITIONAL SECTION:\n");
-        for(int i = 0; i < this->additional.size(); i++) {
-            output.append(this->additional[i].rName + "\t\t");
-            output.append(to_string(this->additional[i].rTtl) + "\t");
-            output.append(classMap[this->additional[i].rClass] + "\t");
-            output.append(rrTypes[this->additional[i].rType] + "\t");
-            output.append(this->additional[i].rData + "\n");
+        for(int i = 0; i < additional.size(); i++) {
+            output.append(additional[i].rName + "\t\t");
+            output.append(to_string(additional[i].rTtl) + "\t");
+            output.append(classMap[additional[i].rClass] + "\t");
+            output.append(rrTypes[additional[i].rType] + "\t");
+            output.append(additional[i].rData + "\n");
         }
     }
     return output;
@@ -340,23 +289,23 @@ void DNSMessage::parseHeader(string& hexData, int& begin) {
     const int rcShift = 0;
     
     // Header is first 12 bytes of hexData - two hex chars = 1 byte
-    this->dnsID = stoul(hexData.substr(0, 4), nullptr, 16);
+    dnsID = stoul(hexData.substr(0, 4), nullptr, 16);
 
     unsigned int flags = stoul(hexData.substr(4,4), nullptr, 16);
     
-    this->headerFlags.QR = (flags & (qrMask)) >> qrShift; 
-    this->headerFlags.OPCODE = (flags & (opMask)) >> opShift; 
-    this->headerFlags.AA = (flags & (aaMask)) >> aaShift; 
-    this->headerFlags.TC = (flags & (tcMask)) >> tcShift; 
-    this->headerFlags.RD = (flags & (rdMask)) >> rdShift; 
-    this->headerFlags.RA = (flags & (raMask)) >> raShift; 
-    this->headerFlags.Z  = (flags & (zMask))  >> zShift;
-    this->headerFlags.RCODE = (flags & (rcMask)) >> rcShift; 
+    headerFlags.QR = (flags & (qrMask)) >> qrShift; 
+    headerFlags.OPCODE = (flags & (opMask)) >> opShift; 
+    headerFlags.AA = (flags & (aaMask)) >> aaShift; 
+    headerFlags.TC = (flags & (tcMask)) >> tcShift; 
+    headerFlags.RD = (flags & (rdMask)) >> rdShift; 
+    headerFlags.RA = (flags & (raMask)) >> raShift; 
+    headerFlags.Z  = (flags & (zMask))  >> zShift;
+    headerFlags.RCODE = (flags & (rcMask)) >> rcShift; 
     
-    this->qdCount = stoul(hexData.substr(8,4), nullptr, 16);
-    this->anCount = stoul(hexData.substr(12,4), nullptr, 16);
-    this->nsCount = stoul(hexData.substr(16,4), nullptr, 16);
-    this->arCount = stoul(hexData.substr(20,4), nullptr, 16);
+    qdCount = stoul(hexData.substr(8,4), nullptr, 16);
+    anCount = stoul(hexData.substr(12,4), nullptr, 16);
+    nsCount = stoul(hexData.substr(16,4), nullptr, 16);
+    arCount = stoul(hexData.substr(20,4), nullptr, 16);
     
     begin = 24;
     
@@ -369,10 +318,10 @@ void DNSMessage::parseQuestions(string& hexData, int& begin) {
         return;
     }
     
-    for(int i = 0; i < this->qdCount; i++) {
+    for(int i = 0; i < qdCount; i++) {
         DNSQuestion newQuery = {};
-        string name = this->extractName(hexData, begin);
-        int nameError = this->validateName(name);
+        string name = extractName(hexData, begin);
+        int nameError = validateName(name);
         
         if(nameError == VALID) {
             newQuery.qName = name;
@@ -382,7 +331,7 @@ void DNSMessage::parseQuestions(string& hexData, int& begin) {
             newQuery.qName = "INVALID NAME ERROR: " + to_string(nameError);
             newQuery.qType = 0;
             newQuery.qClass = 0;
-            this->questions.push_back(newQuery);
+            questions.push_back(newQuery);
             begin = -1;
             return;
         }
@@ -390,7 +339,7 @@ void DNSMessage::parseQuestions(string& hexData, int& begin) {
         if(begin + 8 < hexData.length()) {
             newQuery.qType = stoul(hexData.substr(begin, 4), nullptr, 16);
             newQuery.qClass = stoul(hexData.substr(begin + 4, 4), nullptr, 16);
-            this->questions.push_back(newQuery);
+            questions.push_back(newQuery);
             begin += 8;
         }
         else {
@@ -398,7 +347,7 @@ void DNSMessage::parseQuestions(string& hexData, int& begin) {
             newQuery.qName = "INVALID DATA SIZE";
             newQuery.qType = 0;
             newQuery.qClass = 0;
-            this->questions.push_back(newQuery);
+            questions.push_back(newQuery);
             begin = -1;
             return;
         }
@@ -410,7 +359,7 @@ void DNSMessage::parseQuestions(string& hexData, int& begin) {
 
 // Parses all resource records and updates location to point to the next byte
 void DNSMessage::parseResourceRecords(string& hexData, int& begin) {
-    vector<unsigned int> recordCounts = {this->anCount, this->nsCount, this->arCount};
+    vector<unsigned int> recordCounts = {anCount, nsCount, arCount};
     
     if(begin < 0) {
         return;
@@ -419,8 +368,8 @@ void DNSMessage::parseResourceRecords(string& hexData, int& begin) {
     for(int count = 0; count < 3; count++) {
         for(int i = 0; i < recordCounts[count]; i++) {
             ResourceRecord newRecord = {};
-            string name = this->extractName(hexData, begin);
-            int nameError = this->validateName(name);
+            string name = extractName(hexData, begin);
+            int nameError = validateName(name);
 
             if (nameError == VALID) {
                 newRecord.rName = name;
@@ -435,13 +384,13 @@ void DNSMessage::parseResourceRecords(string& hexData, int& begin) {
                 newRecord.rData = string();
                 switch(count) {
                     case 0:
-                        this->answers.push_back(newRecord);
+                        answers.push_back(newRecord);
                         break;
                     case 1:
-                        this->authority.push_back(newRecord);
+                        authority.push_back(newRecord);
                         break;
                     case 2:
-                        this->additional.push_back(newRecord);
+                        additional.push_back(newRecord);
                         break;
                 }
                 begin = -1;
@@ -455,16 +404,16 @@ void DNSMessage::parseResourceRecords(string& hexData, int& begin) {
                 newRecord.rdLength = stoul(hexData.substr(begin + 16, 4), nullptr, 16);
                 begin += 20;
                 
-                this->parseRRData(hexData, begin, newRecord);
+                parseRRData(hexData, begin, newRecord);
                 switch(count) {
                     case 0:
-                        this->answers.push_back(newRecord);
+                        answers.push_back(newRecord);
                         break;
                     case 1:
-                        this->authority.push_back(newRecord);
+                        authority.push_back(newRecord);
                         break;
                     case 2:
-                        this->additional.push_back(newRecord);
+                        additional.push_back(newRecord);
                         break;
                 }
             }
@@ -478,13 +427,13 @@ void DNSMessage::parseResourceRecords(string& hexData, int& begin) {
                 newRecord.rData = string();
                 switch(count) {
                     case 0:
-                        this->answers.push_back(newRecord);
+                        answers.push_back(newRecord);
                         break;
                     case 1:
-                        this->authority.push_back(newRecord);
+                        authority.push_back(newRecord);
                         break;
                     case 2:
-                        this->additional.push_back(newRecord);
+                        additional.push_back(newRecord);
                         break;
                 }
                 begin = -1;
@@ -527,7 +476,7 @@ void DNSMessage::parseRRData(string& hexData, int& begin, ResourceRecord& dataRe
     }
     else if(dataRecord.rType == 5) {
         // Read data as a record name
-        dataRecord.rData = this->extractName(hexData, begin);
+        dataRecord.rData = extractName(hexData, begin);
     }
     else if(dataRecord.rType == 16) {
         // Read data as ASCII text
@@ -614,6 +563,27 @@ void DNSMessage::parseRRData(string& hexData, int& begin, ResourceRecord& dataRe
     return;
 }
 
+// Cleans formatted hex data of other characters into a usable format
+int DNSMessage::extractRawHex(string& hexString) {
+    // Minimum of 12 bytes to have complete header data
+    const int minLength = 24;
+    vector<char> removeChar = {' ', '"', '\\', 'x'};
+
+    // Clean input of standard characters for proper parsing
+    for(int i = 0; i < removeChar.size(); i++) {
+        hexString.erase(remove(hexString.begin(), hexString.end(), removeChar[i]), hexString.end());
+    }
+    
+    // Convert string to upper case for consistency
+    transform(hexString.begin(), hexString.end(), hexString.begin(), ::toupper);
+    
+    if(hexString.length() < minLength) {
+        // Error: DNS Message has incomplete header data - return error
+        return 0;
+    }
+    return 1;
+}
+
 // Extracts the ASCII name from hex data and updates location to point to the next byte
 string DNSMessage::extractName(string& hexData, int& begin) {
     //Max length is 255 octets, including beginning label and trailing dot
@@ -631,7 +601,7 @@ string DNSMessage::extractName(string& hexData, int& begin) {
                 nameLoc *= 2;
                 
                 // Recursively extract name value from new location
-                name.append(this->extractName(hexData, nameLoc));
+                name.append(extractName(hexData, nameLoc));
                 
                 begin += 4;
                 labelLength = 0;
@@ -674,7 +644,7 @@ string DNSMessage::extractName(string& hexData, int& begin) {
                     nameLoc *= 2;
                     
                     // Recursively extract name value from new location
-                    name.append(this->extractName(hexData, nameLoc));
+                    name.append(extractName(hexData, nameLoc));
 
                     begin += 4;
                     labelLength = 0;
@@ -747,50 +717,3 @@ dnsNameError DNSMessage::validateName(string dnsName) {
 }
 
 
-// Cleans formatted hex data of other characters into a usable format
-string extractRawHex(string hexString) {
-    // Minimum of 12 bytes to have complete header data
-    const int minLength = 24;
-    vector<char> removeChar = {' ', '"', '\\', 'x'};
-
-    // Clean input of standard characters for proper parsing
-    for(int i = 0; i < removeChar.size(); i++) {
-        hexString.erase(remove(hexString.begin(), hexString.end(), removeChar[i]), hexString.end());
-    }
-    
-    // Convert string to upper case for consistency
-    transform(hexString.begin(), hexString.end(), hexString.begin(), ::toupper);
-    
-    if(hexString.length() < minLength) {
-        // Error: DNS Message has incomplete header data - return empty string
-        return string();
-    }
-    return hexString;
-}
-
-int main() {
-    string rawDns;
-    string hexDns;
-    string line;
-    
-    cout << "Please enter hex encoded DNS string. Type 'exit' to complete input:" << endl;
-
-    while(getline(cin, line)) {
-        line.erase(remove(line.begin(), line.end(), '\n'), line.end());
-        if(line == "exit") {
-            break;
-        }
-
-        rawDns.append(line);
-    }
-    
-    if((hexDns = extractRawHex(rawDns)).length() < 1) {
-        cout << "Error: Invalid hex encoded string. Aborting." << endl;
-    }
-    else {
-        DNSMessage decodedData(hexDns);
-        decodedData.printData();
-    }
-    
-    return 0;
-}
