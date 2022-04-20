@@ -1,3 +1,22 @@
+# User-specific files
+*.suo
+*.user
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+[Bb]in/
+[Oo]bj/
+
+# Remainings from resolving conflicts in Source Control
+*.orig
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
 # Prerequisites
 *.d
 
