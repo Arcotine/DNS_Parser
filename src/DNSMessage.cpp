@@ -1,8 +1,7 @@
-#include <string>
-#include <vector>
 #include <iostream>
 #include <unordered_map>
 #include <algorithm>
+#include <utility>
 #include <DNSMessage.hpp>
 
 using namespace std;
@@ -28,7 +27,8 @@ DNSMessage::DNSMessage(string hexData) {
         nsCount = 0;
         arCount = 0;
 
-        cout << "Error: Invalid hex encoded string. Aborting." << endl;
+        // TODO: Throw/catch error to prevent object creation
+        cout << "Error: Invalid hex encoded string. Extracting data as empty." << endl;
     }
     else {
         parseHeader(hexData, nextSection);
@@ -318,7 +318,7 @@ void DNSMessage::parseQuestions(string& hexData, int& begin) {
         return;
     }
     
-    for(int i = 0; i < qdCount; i++) {
+    for(int i = 0; cmp_less(i, qdCount); i++) {
         DNSQuestion newQuery = {};
         string name = extractName(hexData, begin);
         int nameError = validateName(name);
@@ -366,7 +366,7 @@ void DNSMessage::parseResourceRecords(string& hexData, int& begin) {
     }
     
     for(int count = 0; count < 3; count++) {
-        for(int i = 0; i < recordCounts[count]; i++) {
+        for(int i = 0; cmp_less(i, recordCounts[count]); i++) {
             ResourceRecord newRecord = {};
             string name = extractName(hexData, begin);
             int nameError = validateName(name);
@@ -461,10 +461,10 @@ void DNSMessage::parseRRData(string& hexData, int& begin, ResourceRecord& dataRe
     if(dataRecord.rType == 1) {
         // Read data as IPv4 address
         if(begin + (dataRecord.rdLength*2 - 1) < hexData.length()) {
-            for(int i = 0; i < (dataRecord.rdLength*2); i+=2, begin+=2) {
+            for(int i = 0; cmp_less(i, dataRecord.rdLength*2); i+=2, begin+=2) {
                 unsigned int octet = stoul(hexData.substr(begin, 2), nullptr, 16);
                 dataRecord.rData += to_string(octet);
-                if(i + 2 < dataRecord.rdLength*2) {
+                if(cmp_less(i + 2, dataRecord.rdLength*2)) {
                     dataRecord.rData += ".";
                 }
             }
@@ -481,8 +481,8 @@ void DNSMessage::parseRRData(string& hexData, int& begin, ResourceRecord& dataRe
     else if(dataRecord.rType == 16) {
         // Read data as ASCII text
         if(begin + (dataRecord.rdLength*2 - 1) < hexData.length()) {
-            for(int i = 0; i < (dataRecord.rdLength*2); i+=2, begin+=2) {
-                char dataChar = stoul(hexData.substr(begin, 2), nullptr, 16);
+            for(int i = 0; cmp_less(i, dataRecord.rdLength*2); i+=2, begin+=2) {
+                char dataChar = static_cast<char>(stoul(hexData.substr(begin, 2), nullptr, 16));
                 dataRecord.rData += dataChar;
             }
         }
@@ -495,7 +495,7 @@ void DNSMessage::parseRRData(string& hexData, int& begin, ResourceRecord& dataRe
         // Read data as IPv6 Address
         if(begin + (dataRecord.rdLength*2 - 1) < hexData.length()) {
             vector<string> ipSections;
-            for(int i = 0; i < (dataRecord.rdLength*2); i+=4, begin+=4) {
+            for(int i = 0; cmp_less(i, dataRecord.rdLength*2); i+=4, begin+=4) {
                 string section = hexData.substr(begin, 4);
                 transform(section.begin(), section.end(), section.begin(), ::tolower);
                 ipSections.push_back(section);
@@ -620,10 +620,10 @@ string DNSMessage::extractName(string& hexData, int& begin) {
     }
     
     while(labelLength) {
-        for(int i = 0; i < labelLength*2; i+=2, begin+=2) {
+        for(int i = 0; cmp_less(i, labelLength*2); i+=2, begin+=2) {
             // Convert hex to unsigned long, then convert that to ASCII character
             if((begin + 1) < hexData.length()) {
-                char labelChar = stoul(hexData.substr(begin, 2), nullptr, 16);
+                char labelChar = static_cast<char>(stoul(hexData.substr(begin, 2), nullptr, 16));
                 name += labelChar;
             } 
             else {
@@ -684,36 +684,35 @@ dnsNameError DNSMessage::validateName(string dnsName) {
     for(int i = 0; i < dnsName.length(); i++) {
         char currChar = toupper(dnsName[i]);
         
-        switch(currChar) {
-            case '-':
-            case 'A' ... 'Z':
-                onlyNumbers = false;
-                [[fallthrough]];
-            case '0' ... '9':
-                prevCharDot = false;
-                if(++currLabelLength > maxLabelLength) {
-                    return INVALID_NAME_ERROR;
-                }
-                break;
-            case '.':
-                // Error: either started with a dot or has 2+ in a row
-                if (prevCharDot) {
-                    return INVALID_NAME_ERROR;
-                }
-                else {
-                    prevCharDot = true;
-                    currLabelLength = 0;
-                }
-                break;
-            default:
-                // Any other character in DNS name is unsupported
-                return INVALID_CHAR_ERROR;
-                break;
+        if(currChar == '-' || (currChar >= 'A' && currChar <= 'Z')) {
+            onlyNumbers = false;
+            prevCharDot = false;
+            if(++currLabelLength > maxLabelLength) {
+                return INVALID_NAME_ERROR;
+            }
+        }
+        else if(currChar >= '0' && currChar <= '9') {
+            prevCharDot = false;
+            if(++currLabelLength > maxLabelLength) {
+                return INVALID_NAME_ERROR;
+            }
+        }
+        else if(currChar == '.') {
+            // Error: either started with a dot or has 2+ in a row
+            if (prevCharDot) {
+                return INVALID_NAME_ERROR;
+            }
+            else {
+                prevCharDot = true;
+                currLabelLength = 0;
+            }
+        }
+        else {
+            // Any other character in DNS name is unsupported
+            return INVALID_CHAR_ERROR;
         }
     }
     
     // DNS name cannot consist of only numbers
     return onlyNumbers ? NUMERIC_NAME_ERROR : VALID;
 }
-
-

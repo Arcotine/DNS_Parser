@@ -6,7 +6,6 @@ using namespace std;
 
 int main() {
     string rawDns;
-    string hexDns;
     string line;
     
     cout << "Please enter hex encoded DNS string. Type 'exit' to complete input:" << endl;
@@ -19,14 +18,9 @@ int main() {
 
         rawDns.append(line);
     }
-    
-    if((hexDns = extractRawHex(rawDns)).length() < 1) {
-        cout << "Error: Invalid hex encoded string. Aborting." << endl;
-    }
-    else {
-        DNSMessage decodedData(hexDns);
-        decodedData.printData();
-    }
+
+    DNSMessage decodedData(rawDns);
+    decodedData.printData();
     
     return 0;
 }

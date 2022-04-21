@@ -9,6 +9,7 @@
 x64/
 [Bb]in/
 [Oo]bj/
+build/
 
 # Remainings from resolving conflicts in Source Control
 *.orig

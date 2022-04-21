@@ -66,7 +66,7 @@ class DNSMessage {
         string printableResourceRecords();
 
         void parseRRData(string& hexData, int& begin, ResourceRecord& dataRecord);
-        string extractRawHex(string& hexString);
+        int extractRawHex(string& hexString);
         string extractName(string& hexData, int& begin);
         dnsNameError validateName(string dnsName);
 };
