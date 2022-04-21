@@ -9,7 +9,13 @@ To build, navigate to the root directory and enter the command:
 Alternatively, you can use an editor with CMake plugin support (such as VSCode) to build and run. Or compile it manually with your favorite compiler, such as g++
 
 ## Running
-Start the newly built executable in the directory you chose via the command line. Enter your hex data in one of the supported formats (see [DNS Message Examples](#DNS-Message-Examples)).
+Start the newly built executable in the directory you chose via the command line.
+
+`cd build/bin/Debug`
+
+`./DNS_Parser.exe`
+
+ Enter your hex data in one of the supported formats (see [DNS Message Examples](#DNS-Message-Examples)).
 
 **Important: to finish entering hex data, type**
 
